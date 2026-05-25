@@ -1,72 +1,62 @@
-from django.contrib.auth import authenticate
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth.password_validation import validate_password
+from .models import User
 
 
-class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    # Frontend can redirect after login using the user's saved role.
+    role_redirects = {
+        'admin': '/admin/users/',
+        'head': '/admin/users/',
+        'manager': '/manager/dashboard/',
+        'staff': '/staff/resource/',
+    }
+
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token['role']     = user.role
+        token['email']    = user.email
+        token['fullname'] = user.fullname
+        token['username'] = user.username
+        return token
 
     def validate(self, attrs):
-        request = self.context.get("request")
-        user = authenticate(
-            request=request,
-            email=attrs["email"],
-            password=attrs["password"],
-        )
-
-        if user is None:
-            raise serializers.ValidationError("Invalid email or password.")
-
-        if not user.is_active:
-            raise serializers.ValidationError("This account is disabled.")
-
-        role = getattr(user, "role", None)
-        if role is None:
-            raise serializers.ValidationError("This user does not have a role.")
-
-        refresh = RefreshToken.for_user(user)
-        refresh["role"] = role.role
-        refresh["email"] = user.email
-
-        return {
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user": {
-                "id": user.id,
-                "full_name": user.full_name,
-                "email": user.email,
-                "role": role.role,
-            },
-        }
+        data = super().validate(attrs)
+        data['user'] = UserSerializer(self.user).data
+        data['redirect_to'] = self.role_redirects.get(self.user.role, '/')
+        return data
 
 
-class MeSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    full_name = serializers.CharField()
-    email = serializers.EmailField()
-    phone = serializers.CharField()
-    role = serializers.SerializerMethodField()
+class RegisterSerializer(serializers.ModelSerializer):
+    password  = serializers.CharField(write_only=True, validators=[validate_password])
+    password2 = serializers.CharField(write_only=True)
 
-    def get_role(self, user):
-        role = getattr(user, "role", None)
-        return role.role if role else None
+    class Meta:
+        model  = User
+        fields = ['email', 'username', 'fullname', 'role', 'password', 'password2']
 
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+        return attrs
 
-class LogoutSerializer(serializers.Serializer):
-    refresh = serializers.CharField()
-
-    def validate_refresh(self, value):
-        try:
-            self.token = RefreshToken(value)
-        except Exception as exc:
-            raise serializers.ValidationError("Invalid refresh token.") from exc
-        return value
-
-    def save(self, **kwargs):
-        self.token.blacklist()
+    def create(self, validated_data):
+        # Registered users stay inactive until admin/head approval.
+        validated_data.pop('password2')
+        validated_data['is_active'] = False
+        return User.objects.create_user(**validated_data)
 
 
-class CustomTokenRefreshSerializer(TokenRefreshSerializer):
-    pass
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = User
+        fields = ['id', 'email', 'username', 'fullname', 'role', 'is_active', 'created_at']
+        read_only_fields = ['id', 'email', 'role', 'is_active', 'created_at']
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True,
+                                         validators=[validate_password])

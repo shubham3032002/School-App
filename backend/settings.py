@@ -38,7 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework_simplejwt.token_blacklist',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',  # for logout
     'corsheaders',
     'accounts',
 ]
@@ -86,9 +87,17 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+     'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+      'DEFAULT_THROTTLE_RATES': {
+        'anon': '20/min',    # Unauthenticated users: 20 requests/min
+        'user': '100/min',   # Authenticated users: 100 requests/min
+    },
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+
 
 DATABASES = {
     'default': {
@@ -138,9 +147,18 @@ STATIC_URL = 'static/'
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),   # Short-lived access token
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),      # Long-lived refresh token
+    'ROTATE_REFRESH_TOKENS': True,                    # Issue new refresh token on each refresh
+    'BLACKLIST_AFTER_ROTATION': True,                 # Old refresh tokens become invalid
+    'ALGORITHM': 'HS256',                             # HMAC SHA-256 signing algorithm
+    'SIGNING_KEY': SECRET_KEY,                        # Uses Django's SECRET_KEY
+    'AUTH_HEADER_TYPES': ('Bearer',),                 # Header: Authorization: Bearer <token>
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+
+    # Custom token that includes the user's role in the payload
+    'TOKEN_OBTAIN_SERIALIZER': 'accounts.serializers.CustomTokenObtainPairSerializer',
 }
+
+CORS_ALLOW_ALL_ORIGINS = True

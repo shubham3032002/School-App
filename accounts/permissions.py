@@ -1,40 +1,29 @@
 from rest_framework.permissions import BasePermission
 
 
-class HasRole(BasePermission):
-    roles = ()
-
+class IsAdminOrHead(BasePermission):
+    # Admin and head users can approve users and manage roles.
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        role = getattr(request.user, "role", None)
-        return role is not None and role.role in self.roles
-
-
-class IsStudent(HasRole):
-    roles = ("student",)
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role in ['admin', 'head']
+        )
 
 
-class IsParent(HasRole):
-    roles = ("parent",)
+class IsManager(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == 'manager'
+        )
 
 
-class IsTeacher(HasRole):
-    roles = ("teacher",)
-
-
-class IsPrincipal(HasRole):
-    roles = ("principal",)
-
-
-class IsStaff(HasRole):
-    roles = ("staff",)
-
-
-class IsHead(HasRole):
-    roles = ("head",)
-
-
-class IsPrincipalOrHead(HasRole):
-    roles = ("principal", "head")
+class IsStaffMember(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == 'staff'
+        )
