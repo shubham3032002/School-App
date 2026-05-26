@@ -1,23 +1,28 @@
-"""
-URL configuration for backend project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
 
+
+def api_root(request):
+    # Small API index to show available auth endpoints.
+    return JsonResponse(
+        {
+            "message": "School-App API",
+            "endpoints": {
+                "admin": "/admin/",
+                "auth_register": "/api/auth/register/",
+                "auth_login": "/api/auth/login/",
+                "auth_token_refresh": "/api/auth/token/refresh/",
+                "auth_logout": "/api/auth/logout/",
+                "auth_me": "/api/auth/me/",
+            },
+        }
+    )
+
+
 urlpatterns = [
+    path('', api_root, name='api-root'),
     path('admin/', admin.site.urls),
+    # All authentication and account routes live in the accounts app.
     path('api/auth/', include('accounts.urls')),
 ]
