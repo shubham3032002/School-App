@@ -1,7 +1,6 @@
 from pathlib import Path
 from datetime import timedelta
 import os
-import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -95,15 +94,18 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 AUTH_USER_MODEL = 'accounts.User'
 
 # ─────────────────────────────────────────────────────────────
-# Database
+# Database (Railway PostgreSQL)
 # ─────────────────────────────────────────────────────────────
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'railway',
+        'USER': 'postgres',
+        'PASSWORD': 'IfcorwoLvejrdHTgUDAFMmZTozaihMml',
+        'HOST': 'postgres.railway.internal',
+        'PORT': '5432',
+    }
 }
 
 # ─────────────────────────────────────────────────────────────
