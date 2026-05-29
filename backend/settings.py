@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 import os
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -54,15 +55,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-
-    # WhiteNoise
     'whitenoise.middleware.WhiteNoiseMiddleware',
-
     'django.contrib.sessions.middleware.SessionMiddleware',
-
-    # CORS
     'corsheaders.middleware.CorsMiddleware',
-
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -100,18 +95,15 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 AUTH_USER_MODEL = 'accounts.User'
 
 # ─────────────────────────────────────────────────────────────
-# Database (Railway PostgreSQL)
+# Database
 # ─────────────────────────────────────────────────────────────
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'railway',
-        'USER': 'postgres',
-        'PASSWORD': 'IfcorwoLvejrdHTgUDAFMmZTozaihMml',
-        'HOST': 'postgres.railway.internal',
-        'PORT': '5432',
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL'),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -119,18 +111,10 @@ DATABASES = {
 # ─────────────────────────────────────────────────────────────
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -138,11 +122,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # ─────────────────────────────────────────────────────────────
 
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
 # ─────────────────────────────────────────────────────────────
@@ -150,12 +131,8 @@ USE_TZ = True
 # ─────────────────────────────────────────────────────────────
 
 STATIC_URL = '/static/'
-
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-STATICFILES_STORAGE = (
-    'whitenoise.storage.CompressedManifestStaticFilesStorage'
-)
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ─────────────────────────────────────────────────────────────
 # Default Primary Key Field Type
@@ -171,16 +148,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
-
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
-
     'DEFAULT_THROTTLE_RATES': {
         'anon': '20/min',
         'user': '100/min',
@@ -193,25 +167,15 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-
     'ROTATE_REFRESH_TOKENS': True,
-
     'BLACKLIST_AFTER_ROTATION': True,
-
     'ALGORITHM': 'HS256',
-
     'SIGNING_KEY': SECRET_KEY,
-
     'AUTH_HEADER_TYPES': ('Bearer',),
-
     'USER_ID_FIELD': 'id',
-
     'USER_ID_CLAIM': 'user_id',
-
-    'TOKEN_OBTAIN_SERIALIZER':
-        'accounts.serializers.CustomTokenObtainPairSerializer',
+    'TOKEN_OBTAIN_SERIALIZER': 'accounts.serializers.CustomTokenObtainPairSerializer',
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -221,11 +185,9 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 
 # ─────────────────────────────────────────────────────────────
-# Security Headers (Production Recommended)
+# Security Headers
 # ─────────────────────────────────────────────────────────────
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
 SESSION_COOKIE_SECURE = True
-
 CSRF_COOKIE_SECURE = True
