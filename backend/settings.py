@@ -73,7 +73,7 @@ DATABASES = {
     'default': dj_database_url.parse(
         os.environ.get(
             'DATABASE_URL',
-            'postgresql://postgres:IfcorwoLvejrdHTgUDAFMmZTozaihMml@zephyr.proxy.rlwy.net:YOUR_PORT/railway'
+            'postgresql://postgres:IfcorwoLvejrdHTgUDAFMmZTozaihMml@zephyr.proxy.rlwy.net:5432/railway'
         ),
         conn_max_age=600,
     )
