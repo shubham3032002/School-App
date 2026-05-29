@@ -100,7 +100,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 AUTH_USER_MODEL = 'accounts.User'
 
 # ─────────────────────────────────────────────────────────────
-# Database (Railway PostgreSQL Internal Network)
+# Database (Railway PostgreSQL)
 # ─────────────────────────────────────────────────────────────
 
 DATABASES = {
