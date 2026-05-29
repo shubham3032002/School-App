@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 import os
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -95,17 +96,15 @@ AUTH_USER_MODEL = 'accounts.User'
 
 # ─────────────────────────────────────────────────────────────
 # Database (Railway PostgreSQL)
+# Uses DATABASE_URL env variable — works both locally and on Railway
 # ─────────────────────────────────────────────────────────────
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'railway',
-        'USER': 'postgres',
-        'PASSWORD': 'IfcorwoLvejrdHTgUDAFMmZTozaihMml',
-        'HOST': 'postgres.railway.internal',
-        'PORT': '5432',
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL'),
+        conn_max_age=600,
+        ssl_require=False,
+    )
 }
 
 # ─────────────────────────────────────────────────────────────
