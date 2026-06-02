@@ -15,6 +15,11 @@ def api_root(request):
                 "auth_token_refresh": "/api/auth/token/refresh/",
                 "auth_logout": "/api/auth/logout/",
                 "auth_me": "/api/auth/me/",
+                "teachers": "/api/teachers/",
+                "classes": "/api/classes/",
+                "timetable": "/api/timetable/",
+                "students": "/api/students/",
+                "homework": "/api/homework/",
             },
         }
     )
@@ -25,4 +30,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # All authentication and account routes live in the accounts app.
     path('api/auth/', include('accounts.urls')),
+    path('api/', include('teacher.urls')),
 ]
