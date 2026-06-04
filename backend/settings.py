@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import timedelta
 import os
 import dj_database_url
+from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -14,7 +15,7 @@ SECRET_KEY = os.environ.get(
     'django-insecure-xydf()ksfsmc06z*z6g0n%gus_1ir9hc=dj9!o$-33te23!5b1'
 )
 
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+DEBUG = True
 
 ALLOWED_HOSTS = [
     'school-app-production-2e35.up.railway.app',
@@ -101,10 +102,10 @@ AUTH_USER_MODEL = 'accounts.User'
 # ─────────────────────────────────────────────────────────────
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
+    'default': dj_database_url.parse(
+        config('DIRECT_URL'),
         conn_max_age=600,
-        ssl_require=False,
+        ssl_require=True,
     )
 }
 
