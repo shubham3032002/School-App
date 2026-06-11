@@ -6,19 +6,16 @@ from .views import (
     ClassViewSet,
     HomeworkSubmissionViewSet,
     HomeworkViewSet,
-    StudentViewSet,
     TeacherClassAssignmentViewSet,
     TeacherViewSet,
     TimetableSlotViewSet,
 )
-
 
 router = DefaultRouter()
 router.register('teachers', TeacherViewSet, basename='teacher')
 router.register('classes', ClassViewSet, basename='class')
 router.register('assignments', TeacherClassAssignmentViewSet, basename='teacher-assignment')
 router.register('timetable', TimetableSlotViewSet, basename='timetable')
-router.register('students', StudentViewSet, basename='student')
 router.register('enrollments', ClassEnrollmentViewSet, basename='enrollment')
 router.register('homework', HomeworkViewSet, basename='homework')
 router.register('submissions', HomeworkSubmissionViewSet, basename='homework-submission')

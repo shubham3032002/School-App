@@ -1,18 +1,19 @@
 from django.urls import path
+
 from .views import (
-    StudentListCreateView,
-    StudentDetailView,
-    AttendanceListCreateView,
     AttendanceDetailView,
+    AttendanceListCreateView,
+    AttendanceSummaryView,
     BulkAttendanceView,
     ClassStudentsView,
-    AttendanceSummaryView,
+    StudentDetailView,
+    StudentListCreateView,
 )
 
 urlpatterns = [
     # ── Student CRUD ──────────────────────────────────────────
-    path('students/',          StudentListCreateView.as_view(), name='student-list'),
-    path('students/<int:pk>/', StudentDetailView.as_view(),     name='student-detail'),
+    path('',          StudentListCreateView.as_view(), name='student-list'),
+    path('<int:pk>/', StudentDetailView.as_view(),     name='student-detail'),
 
     # ── Attendance ────────────────────────────────────────────
     path('attendance/',          AttendanceListCreateView.as_view(), name='attendance-list'),
