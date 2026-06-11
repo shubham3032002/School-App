@@ -10,12 +10,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security
 # ─────────────────────────────────────────────────────────────
 
-SECRET_KEY = os.environ.get(
-    'SECRET_KEY',
-    'django-insecure-xydf()ksfsmc06z*z6g0n%gus_1ir9hc=dj9!o$-33te23!5b1'
-)
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-xydf()ksfsmc06z*z6g0n%gus_1ir9hc=dj9!o$-33te23!5b1')
 
-DEBUG = True
+DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = [
     'school-app-production-2e35.up.railway.app',
@@ -40,15 +37,16 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # Third-party apps
+    # Third-party
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
 
-    # Local apps
+    # Local
     'accounts',
     'teacher',
+    'student'
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -97,15 +95,14 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 AUTH_USER_MODEL = 'accounts.User'
 
 # ─────────────────────────────────────────────────────────────
-# Database (Railway PostgreSQL)
-# Uses DATABASE_URL env variable — works both locally and on Railway
+# Database
+# Just change DIRECT_URL in .env to switch between Supabase and local
 # ─────────────────────────────────────────────────────────────
-
 DATABASES = {
     'default': dj_database_url.parse(
         config('DIRECT_URL'),
         conn_max_age=600,
-        ssl_require=True,
+        ssl_require=config('DB_SSL', default=False, cast=bool),
     )
 }
 
@@ -138,7 +135,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ─────────────────────────────────────────────────────────────
-# Default Primary Key Field Type
+# Default Primary Key
 # ─────────────────────────────────────────────────────────────
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

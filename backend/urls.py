@@ -31,4 +31,5 @@ urlpatterns = [
     # All authentication and account routes live in the accounts app.
     path('api/auth/', include('accounts.urls')),
     path('api/', include('teacher.urls')),
+    path('api/student/',  include('student.urls')),
 ]
