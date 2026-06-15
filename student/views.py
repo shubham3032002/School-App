@@ -1,10 +1,13 @@
 from django.shortcuts import render
 
-from rest_framework import generics ,status , filters
+from rest_framework import generics, status, filters
 from rest_framework.permissions import IsAuthenticated
-from  rest_framework.response import Response
+from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
+from django.contrib.auth.hashers import check_password, make_password
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework.exceptions import AuthenticationFailed
 
 from teacher.models import Class
 from .models import Student, AttendanceRecord
@@ -19,28 +22,57 @@ from .permissions import IsAdminOrHead, IsTeacher, IsHomeroomTeacher
 
 
 # ─────────────────────────────────────────────
+# Helper — decode student JWT
+# ─────────────────────────────────────────────
+
+def get_student_from_token(request):
+    """
+    Decode the Bearer token and return the Student instance.
+    Raises AuthenticationFailed if token is missing, invalid, or not a student token.
+    """
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        raise AuthenticationFailed('Bearer token required.')
+
+    raw_token = auth_header.split(' ')[1]
+
+    try:
+        token = AccessToken(raw_token)
+    except Exception:
+        raise AuthenticationFailed('Token is invalid or expired.')
+
+    if token.get('type') != 'student':
+        raise AuthenticationFailed('Not a student token.')
+
+    student_id = token.get('student_id')
+    try:
+        return Student.objects.select_related('class_id').get(id=student_id)
+    except Student.DoesNotExist:
+        raise AuthenticationFailed('Student not found.')
+
+
+# ─────────────────────────────────────────────
 # Student CRUD
 # ─────────────────────────────────────────────
 
 class StudentListCreateView(generics.ListCreateAPIView):
     """
-    GET /api/student/students/ - List all students
-    post /api/student/students/ - Create a new student
+    GET  /api/student/          - List all students
+    POST /api/student/          - Create a new student
+    Admin / head only.
     """
-
-
     permission_classes = [IsAuthenticated, IsAdminOrHead]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['first_name', 'last_name', 'admission_number', 'roll_number']
-    ordering_fields = ['first_name', 'last_name', 'admission_number', 'created_at']
+    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields      = ['first_name', 'last_name', 'admission_number', 'roll_number']
+    ordering_fields    = ['first_name', 'last_name', 'admission_number', 'created_at']
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return StudentWriteSerializer
         return StudentReadSerializer
-    
+
     def get_queryset(self):
-        queryset =Student.objects.select_related('class_id')
+        queryset = Student.objects.select_related('class_id')
 
         class_id = self.request.query_params.get('class_id')
         section  = self.request.query_params.get('section')
@@ -53,43 +85,158 @@ class StudentListCreateView(generics.ListCreateAPIView):
         return queryset
 
 
-
 class StudentDetailView(generics.RetrieveUpdateDestroyAPIView):
-     """
-    GET    /api/student/students/<id>/  — get student
-    PUT    /api/student/students/<id>/  — full update
-    PATCH  /api/student/students/<id>/  — partial update
-    DELETE /api/student/students/<id>/  — delete student
+    """
+    GET    /api/student/<id>/  - get student
+    PUT    /api/student/<id>/  - full update
+    PATCH  /api/student/<id>/  - partial update
+    DELETE /api/student/<id>/  - delete student
     Admin / head only.
     """
-     
-     permission_classes = [IsAuthenticated, IsAdminOrHead]
+    permission_classes = [IsAuthenticated, IsAdminOrHead]
+    queryset           = Student.objects.select_related('class_id')
 
-     queryset = Student.objects.select_related('class_id')
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return StudentWriteSerializer
+        return StudentReadSerializer
 
 
-     def get_serializer_class(self):
-         if self.request.method in ['PUT', 'PATCH']:
-             return StudentWriteSerializer
-         return StudentReadSerializer
-     
+# ─────────────────────────────────────────────
+# Student Auth
+# ─────────────────────────────────────────────
 
+class StudentLoginView(APIView):
+    """
+    POST /api/student/login/
+    {
+        "admission_number": "ADM001",
+        "password": "password@123"
+    }
+    """
+    permission_classes     = []   # public endpoint
+    authentication_classes = []   # no auth needed
+
+    def post(self, request):
+        admission_number = request.data.get('admission_number')
+        password         = request.data.get('password')
+
+        if not admission_number or not password:
+            return Response(
+                {'detail': 'admission_number and password are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            student = Student.objects.get(admission_number=admission_number)
+        except Student.DoesNotExist:
+            return Response(
+                {'detail': 'Invalid credentials.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if not check_password(password, student.password):
+            return Response(
+                {'detail': 'Invalid credentials.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Issue JWT token with student info embedded
+        refresh = RefreshToken()
+        refresh['student_id']       = student.id
+        refresh['admission_number'] = student.admission_number
+        refresh['type']             = 'student'
+
+        return Response({
+            'refresh':          str(refresh),
+            'access':           str(refresh.access_token),
+            'student_id':       student.id,
+            'admission_number': student.admission_number,
+            'full_name':        f"{student.first_name} {student.last_name}",
+        }, status=status.HTTP_200_OK)
+
+
+class StudentProfileView(APIView):
+    """
+    GET /api/student/profile/
+    Returns the profile of the logged-in student only.
+    Requires the student's own Bearer token from login.
+    """
+    permission_classes     = []   # we manually validate the student token
+    authentication_classes = []
+
+    def get(self, request):
+        student    = get_student_from_token(request)
+        serializer = StudentReadSerializer(student)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class StudentChangePasswordView(APIView):
+    """
+    POST /api/student/change-password/
+    {
+        "admission_number": "ADM001",
+        "old_password": "password@123",
+        "new_password": "newpass123"
+    }
+    """
+    permission_classes     = []   # student has no Django user so no IsAuthenticated
+    authentication_classes = []
+
+    def post(self, request):
+        admission_number = request.data.get('admission_number')
+        old_password     = request.data.get('old_password')
+        new_password     = request.data.get('new_password')
+
+        if not all([admission_number, old_password, new_password]):
+            return Response(
+                {'detail': 'admission_number, old_password and new_password are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            student = Student.objects.get(admission_number=admission_number)
+        except Student.DoesNotExist:
+            return Response(
+                {'detail': 'Invalid credentials.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if not check_password(old_password, student.password):
+            return Response(
+                {'detail': 'Old password is incorrect.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if old_password == new_password:
+            return Response(
+                {'detail': 'New password must be different from old password.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        student.password = make_password(new_password)
+        student.save()
+
+        return Response({'detail': 'Password changed successfully.'})
+
+
+# ─────────────────────────────────────────────
+# Attendance
+# ─────────────────────────────────────────────
 
 class AttendanceListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/student/attendance/  — list attendance (teacher sees own class only)
-    POST /api/student/attendance/  — mark single attendance (homeroom teacher only)
+    GET  /api/student/attendance/  - list attendance (teacher sees own class only)
+    POST /api/student/attendance/  - mark single attendance (homeroom teacher only)
     Filters: ?klass=1  ?date=2026-06-11  ?student=5  ?status=Absent
     """
-
-
     permission_classes = [IsAuthenticated, IsTeacher]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return AttendanceWriteSerializer
         return AttendanceReadSerializer
-    
+
     def get_queryset(self):
         qs      = AttendanceRecord.objects.select_related('student', 'klass', 'teacher__user')
         teacher = self.request.user.teacher_profile
@@ -97,7 +244,6 @@ class AttendanceListCreateView(generics.ListCreateAPIView):
         # Teachers only see their own homeroom class attendance
         qs = qs.filter(klass__homeroom_teacher=teacher)
 
-        # Optional filters
         klass   = self.request.query_params.get('klass')
         date    = self.request.query_params.get('date')
         student = self.request.query_params.get('student')
@@ -113,23 +259,23 @@ class AttendanceListCreateView(generics.ListCreateAPIView):
             qs = qs.filter(status=status)
 
         return qs
-    
+
     def perform_create(self, serializer):
         teacher = self.request.user.teacher_profile
         klass   = serializer.validated_data['klass']
 
-        # Only homeroom teacher of this class can mark attendance
         if klass.homeroom_teacher != teacher:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('Only the homeroom teacher can mark attendance for this class.')
 
         serializer.save(teacher=teacher)
 
+
 class AttendanceDetailView(generics.RetrieveUpdateAPIView):
     """
-    GET   /api/student/attendance/<id>/  — get single record
-    PUT   /api/student/attendance/<id>/  — update record
-    PATCH /api/student/attendance/<id>/  — partial update
+    GET   /api/student/attendance/<id>/  - get single record
+    PUT   /api/student/attendance/<id>/  - update record
+    PATCH /api/student/attendance/<id>/  - partial update
     No DELETE — attendance records are permanent.
     Only homeroom teacher of that class allowed.
     """
@@ -140,7 +286,7 @@ class AttendanceDetailView(generics.RetrieveUpdateAPIView):
         if self.request.method in ['PUT', 'PATCH']:
             return AttendanceWriteSerializer
         return AttendanceReadSerializer
-    
+
 
 # ─────────────────────────────────────────────
 # Attendance — Bulk Mark for Entire Class
@@ -164,7 +310,6 @@ class BulkAttendanceView(APIView):
         attendance_date = data['attendance_date']
         teacher         = request.user.teacher_profile
 
-        # Only homeroom teacher allowed
         if klass.homeroom_teacher != teacher:
             return Response(
                 {'detail': 'Only the homeroom teacher can mark attendance for this class.'},
@@ -177,7 +322,6 @@ class BulkAttendanceView(APIView):
         for record in data['records']:
             student = get_object_or_404(Student, id=record['student'])
 
-            # Create new or update existing attendance record
             obj, is_new = AttendanceRecord.objects.update_or_create(
                 student=student,
                 attendance_date=attendance_date,
@@ -198,7 +342,6 @@ class BulkAttendanceView(APIView):
             'date':   str(attendance_date),
             'class':  klass.name,
         }, status=status.HTTP_200_OK)
-
 
 
 # ─────────────────────────────────────────────
@@ -238,6 +381,7 @@ class ClassStudentsView(APIView):
             'students':   data,
         })
 
+
 # ─────────────────────────────────────────────
 # Attendance Summary Report
 # ─────────────────────────────────────────────
@@ -246,7 +390,6 @@ class AttendanceSummaryView(APIView):
     """
     GET /api/student/attendance/summary/?klass=1&date=2026-06-11
     Returns count of each status for a class on a given date.
-    Useful for daily attendance dashboard.
     """
     permission_classes = [IsAuthenticated, IsTeacher]
 

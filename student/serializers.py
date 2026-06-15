@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from .models import Student, AttendanceRecord
-
+from django.contrib.auth.hashers import make_password
 
 class StudentWriteSerializer(serializers.ModelSerializer):
     """Used for creating and updating students."""
@@ -25,6 +25,9 @@ class StudentWriteSerializer(serializers.ModelSerializer):
             'guardian_phone',
         ]
         read_only_fields = ['id']
+    def create(self, validated_data):
+        validated_data['password'] = make_password('password@123')
+        return super().create(validated_data)
 
     def validate_date_of_birth(self, value):
         # Cannot be in the future

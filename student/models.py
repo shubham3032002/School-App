@@ -23,6 +23,7 @@ class Student(models.Model):
     guardian_name    = models.CharField(max_length=100, blank=True, null=True)
     guardian_phone   = models.CharField(max_length=15, blank=True, null=True)
     created_at       = models.DateTimeField(auto_now_add=True)
+    password = models.CharField(max_length=128)
 
     class Meta:
         ordering = ['first_name', 'last_name']

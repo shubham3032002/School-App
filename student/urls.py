@@ -8,6 +8,9 @@ from .views import (
     ClassStudentsView,
     StudentDetailView,
     StudentListCreateView,
+    StudentLoginView,
+    StudentChangePasswordView,
+    StudentProfileView
 )
 
 urlpatterns = [
@@ -23,4 +26,8 @@ urlpatterns = [
 
     # ── Helpers ───────────────────────────────────────────────
     path('classes/<int:klass_id>/students/', ClassStudentsView.as_view(), name='class-students'),
+     path('login/',           StudentLoginView.as_view(),          name='student-login'),
+    path('change-password/', StudentChangePasswordView.as_view(), name='student-change-password'),
+    path('students/me/', StudentProfileView.as_view(), name='student-profile'),
+
 ]
