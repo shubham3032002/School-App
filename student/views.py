@@ -18,7 +18,7 @@ from .serializers import (
     AttendanceReadSerializer,
     BulkAttendanceSerializer,
 )
-from .permissions import IsAdminOrHead, IsTeacher, IsHomeroomTeacher
+from .permissions import IsAdminOrHead, IsTeacher, IsClassTeacher 
 
 
 # ─────────────────────────────────────────────
@@ -56,15 +56,16 @@ def get_student_from_token(request):
 # ─────────────────────────────────────────────
 
 class StudentListCreateView(generics.ListCreateAPIView):
-    """
-    GET  /api/student/          - List all students
-    POST /api/student/          - Create a new student
-    Admin / head only.
-    """
-    permission_classes = [IsAuthenticated, IsAdminOrHead]
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields      = ['first_name', 'last_name', 'admission_number', 'roll_number']
-    ordering_fields    = ['first_name', 'last_name', 'admission_number', 'created_at']
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields   = ['first_name', 'last_name', 'admission_number', 'roll_number']
+    ordering_fields = ['first_name', 'last_name', 'admission_number', 'created_at']
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            # ✅ Only class teacher / secondary class teacher / admin / principal
+            return [IsAuthenticated(), IsClassTeacher()]
+        # GET: any authenticated teacher or admin
+        return [IsAuthenticated(), IsTeacher()]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -73,18 +74,33 @@ class StudentListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = Student.objects.select_related('class_id')
-
         class_id = self.request.query_params.get('class_id')
         section  = self.request.query_params.get('section')
-
         if class_id:
             queryset = queryset.filter(class_id=class_id)
         if section:
             queryset = queryset.filter(section=section)
-
         return queryset
 
+    def perform_create(self, serializer):
+        # ✅ Extra guard: confirm teacher is class/secondary teacher of the target class
+        if self.request.user.role not in ['admin', 'principal']:
+            teacher  = self.request.user.teacher_profile
+            klass_id = self.request.data.get('class_id')
+            from teacher.models import Class
+            from rest_framework.exceptions import PermissionDenied
+            try:
+                klass = Class.objects.get(pk=klass_id)
+            except Class.DoesNotExist:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'class_id': 'Class not found.'})
+            if klass.class_teacher != teacher and klass.secondary_class_teacher != teacher:
+                raise PermissionDenied(
+                    'You can only add students to a class where you are the class teacher.'
+                )
+        serializer.save()
 
+        
 class StudentDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     GET    /api/student/<id>/  - get student
@@ -225,12 +241,7 @@ class StudentChangePasswordView(APIView):
 # ─────────────────────────────────────────────
 
 class AttendanceListCreateView(generics.ListCreateAPIView):
-    """
-    GET  /api/student/attendance/  - list attendance (teacher sees own class only)
-    POST /api/student/attendance/  - mark single attendance (homeroom teacher only)
-    Filters: ?klass=1  ?date=2026-06-11  ?student=5  ?status=Absent
-    """
-    permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [IsAuthenticated, IsClassTeacher]   # ✅ changed
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -241,22 +252,22 @@ class AttendanceListCreateView(generics.ListCreateAPIView):
         qs      = AttendanceRecord.objects.select_related('student', 'klass', 'teacher__user')
         teacher = self.request.user.teacher_profile
 
-        # Teachers only see their own homeroom class attendance
-        qs = qs.filter(klass__homeroom_teacher=teacher)
+        # ✅ Teachers see classes where they are class_teacher OR secondary_class_teacher
+        from django.db.models import Q
+        qs = qs.filter(
+            Q(klass__class_teacher=teacher) |
+            Q(klass__secondary_class_teacher=teacher)
+        )
 
         klass   = self.request.query_params.get('klass')
         date    = self.request.query_params.get('date')
         student = self.request.query_params.get('student')
-        status  = self.request.query_params.get('status')
+        astatus = self.request.query_params.get('status')
 
-        if klass:
-            qs = qs.filter(klass_id=klass)
-        if date:
-            qs = qs.filter(attendance_date=date)
-        if student:
-            qs = qs.filter(student_id=student)
-        if status:
-            qs = qs.filter(status=status)
+        if klass:   qs = qs.filter(klass_id=klass)
+        if date:    qs = qs.filter(attendance_date=date)
+        if student: qs = qs.filter(student_id=student)
+        if astatus: qs = qs.filter(status=astatus)
 
         return qs
 
@@ -264,22 +275,16 @@ class AttendanceListCreateView(generics.ListCreateAPIView):
         teacher = self.request.user.teacher_profile
         klass   = serializer.validated_data['klass']
 
-        if klass.homeroom_teacher != teacher:
+        # ✅ Must be class_teacher OR secondary_class_teacher
+        if klass.class_teacher != teacher and klass.secondary_class_teacher != teacher:
             from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Only the homeroom teacher can mark attendance for this class.')
-
+            raise PermissionDenied(
+                'Only the class teacher or secondary class teacher can mark attendance.'
+            )
         serializer.save(teacher=teacher)
 
-
 class AttendanceDetailView(generics.RetrieveUpdateAPIView):
-    """
-    GET   /api/student/attendance/<id>/  - get single record
-    PUT   /api/student/attendance/<id>/  - update record
-    PATCH /api/student/attendance/<id>/  - partial update
-    No DELETE — attendance records are permanent.
-    Only homeroom teacher of that class allowed.
-    """
-    permission_classes = [IsAuthenticated, IsHomeroomTeacher]
+    permission_classes = [IsAuthenticated, IsClassTeacher]   # ✅ changed
     queryset           = AttendanceRecord.objects.select_related('student', 'klass', 'teacher__user')
 
     def get_serializer_class(self):
@@ -293,13 +298,7 @@ class AttendanceDetailView(generics.RetrieveUpdateAPIView):
 # ─────────────────────────────────────────────
 
 class BulkAttendanceView(APIView):
-    """
-    POST /api/student/attendance/bulk/
-    Mark attendance for ALL students in a class in one request.
-    If a record already exists for that student+date it gets updated.
-    Only homeroom teacher of the class allowed.
-    """
-    permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [IsAuthenticated, IsClassTeacher]  # ✅ changed
 
     def post(self, request):
         serializer = BulkAttendanceSerializer(data=request.data)
@@ -310,12 +309,12 @@ class BulkAttendanceView(APIView):
         attendance_date = data['attendance_date']
         teacher         = request.user.teacher_profile
 
-        if klass.homeroom_teacher != teacher:
+        # ✅ Updated guard
+        if klass.class_teacher != teacher and klass.secondary_class_teacher != teacher:
             return Response(
-                {'detail': 'Only the homeroom teacher can mark attendance for this class.'},
-                status=status.HTTP_403_FORBIDDEN
+                {'detail': 'Only the class teacher or secondary class teacher can mark attendance.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
-
         created = 0
         updated = 0
 

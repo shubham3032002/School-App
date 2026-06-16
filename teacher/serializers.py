@@ -41,7 +41,7 @@ class TeacherReadSerializer(serializers.ModelSerializer):
 
 class ClassWriteSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Class
+        model  = Class
         fields = [
             'id',
             'name',
@@ -49,19 +49,26 @@ class ClassWriteSerializer(serializers.ModelSerializer):
             'section',
             'academic_year',
             'homeroom_teacher',
+            'class_teacher',             
+            'secondary_class_teacher',   
         ]
         read_only_fields = ['id']
 
 
 class ClassReadSerializer(serializers.ModelSerializer):
     homeroom_teacher_name = serializers.CharField(
-        source='homeroom_teacher.user.fullname',
-        read_only=True,
-        default=None,
+        source='homeroom_teacher.user.fullname', read_only=True, default=None,
+    )
+    # ✅ ADD THESE TWO
+    class_teacher_name = serializers.CharField(
+        source='class_teacher.user.fullname', read_only=True, default=None,
+    )
+    secondary_class_teacher_name = serializers.CharField(
+        source='secondary_class_teacher.user.fullname', read_only=True, default=None,
     )
 
     class Meta:
-        model = Class
+        model  = Class
         fields = [
             'id',
             'name',
@@ -70,6 +77,10 @@ class ClassReadSerializer(serializers.ModelSerializer):
             'academic_year',
             'homeroom_teacher',
             'homeroom_teacher_name',
+            'class_teacher',                   # ✅ ADD
+            'class_teacher_name',              # ✅ ADD
+            'secondary_class_teacher',         # ✅ ADD
+            'secondary_class_teacher_name',    # ✅ ADD
             'created_at',
         ]
 

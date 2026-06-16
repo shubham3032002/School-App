@@ -38,9 +38,10 @@ from .serializers import (
 )
 
 
-ADMIN_HEAD = ['admin', 'head']
-MANAGER_ABOVE = ['manager', 'head', 'admin']
-
+ADMIN_ONLY     = ['admin']
+ADMIN_HEAD     = ['admin', 'head']
+PRINCIPAL_ADMIN = ['admin', 'principal']   # ✅ ADD
+MANAGER_ABOVE  = ['manager', 'head', 'admin']
 
 def has_role(user, roles):
     return bool(user and user.is_authenticated and user.role in roles)
@@ -157,15 +158,17 @@ class ClassViewSet(RoleRestrictedViewSet):
         )
 
     def perform_create(self, serializer):
-        self.require_roles(MANAGER_ABOVE)
+        # ✅ Only admin can create a class
+        self.require_roles(ADMIN_ONLY)
         serializer.save()
 
     def perform_update(self, serializer):
-        self.require_roles(MANAGER_ABOVE)
+        # ✅ Admin or Principal can update (assign class teacher)
+        self.require_roles(PRINCIPAL_ADMIN)
         serializer.save()
 
     def perform_destroy(self, instance):
-        self.require_roles(MANAGER_ABOVE)
+        self.require_roles(ADMIN_ONLY)
         instance.delete()
 
     def ensure_can_enroll_for_class(self, klass):
@@ -233,6 +236,30 @@ class ClassViewSet(RoleRestrictedViewSet):
 
         serializer = ClassEnrollmentReadSerializer(enrollment)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['patch'], url_path='assign-class-teacher')
+    def assign_class_teacher(self, request, pk=None):
+        """
+        PATCH /api/classes/<id>/assign-class-teacher/
+        Body: { "class_teacher": 3, "secondary_class_teacher": 5 }
+        Only principal or admin can call this.
+        """
+        if not has_role(request.user, ['admin', 'principal']):
+            raise PermissionDenied('Only admin or principal can assign class teachers.')
+
+        klass = get_object_or_404(self.get_queryset(), pk=pk)
+
+        ct_id  = request.data.get('class_teacher')
+        sct_id = request.data.get('secondary_class_teacher')
+
+        if ct_id is not None:
+            klass.class_teacher = get_object_or_404(Teacher, pk=ct_id)
+        if sct_id is not None:
+            klass.secondary_class_teacher = get_object_or_404(Teacher, pk=sct_id)
+
+        klass.save()
+        return Response(ClassReadSerializer(klass).data)
+
 
 
 class TeacherClassAssignmentViewSet(RoleRestrictedViewSet):

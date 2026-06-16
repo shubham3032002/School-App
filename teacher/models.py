@@ -24,29 +24,38 @@ class Teacher(models.Model):
 
 
 class Class(models.Model):
-    name = models.CharField(max_length=80)
-    grade_level = models.CharField(max_length=20)
-    section = models.CharField(max_length=10, blank=True)
-    academic_year = models.PositiveSmallIntegerField()
-    homeroom_teacher = models.ForeignKey(
+    name             = models.CharField(max_length=80)
+    grade_level      = models.CharField(max_length=20)
+    section          = models.CharField(max_length=10, blank=True)
+    academic_year    = models.PositiveSmallIntegerField()
+
+    homeroom_teacher = models.ForeignKey(          # rename this → class_teacher
         Teacher,
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name='homeroom_classes',
     )
+
+    # ✅ ADD THIS
+    class_teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='class_teacher_classes',
+        help_text='Primary class teacher who owns this class.',
+    )
+
+    # ✅ ADD THIS
+    secondary_class_teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='secondary_class_teacher_classes',
+        help_text='Secondary/co-class teacher.',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['academic_year', 'grade_level', 'section', 'name']
-        verbose_name = 'class'
-        verbose_name_plural = 'classes'
-
-    def __str__(self):
-        section = f' {self.section}' if self.section else ''
-        return f'{self.name} - Grade {self.grade_level}{section} ({self.academic_year})'
-
-
+    
 class TeacherClassAssignment(models.Model):
     teacher = models.ForeignKey(
         Teacher,

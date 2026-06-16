@@ -38,6 +38,8 @@ class User(AbstractUser, PermissionsMixin):
         HEAD    = 'head',    'Head'
         MANAGER = 'manager', 'Manager'
         STAFF   = 'staff',   'Staff'
+        TEACHER   = 'teacher',   'Teacher'
+        PRINCIPAL = 'principal', 'Principal'
 
     # Email is used as the login field instead of username.
     email    = models.EmailField(unique=True)
