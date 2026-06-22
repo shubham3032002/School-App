@@ -263,7 +263,7 @@ class ClassViewSet(RoleRestrictedViewSet):
 
 
 class TeacherClassAssignmentViewSet(RoleRestrictedViewSet):
-    """Manage teacher-to-class subject assignments."""
+    """Manage teacher-to-class subject assignments. Only principal or admin can assign."""
 
     queryset = TeacherClassAssignment.objects.none()
     read_serializer_class = TeacherClassAssignmentReadSerializer
@@ -273,15 +273,15 @@ class TeacherClassAssignmentViewSet(RoleRestrictedViewSet):
         return TeacherClassAssignment.objects.select_related('teacher__user', 'klass')
 
     def perform_create(self, serializer):
-        self.require_roles(ADMIN_HEAD)
+        self.require_roles(PRINCIPAL_ADMIN)
         serializer.save()
 
     def perform_update(self, serializer):
-        self.require_roles(ADMIN_HEAD)
+        self.require_roles(PRINCIPAL_ADMIN)
         serializer.save()
 
     def perform_destroy(self, instance):
-        self.require_roles(ADMIN_HEAD)
+        self.require_roles(PRINCIPAL_ADMIN)
         instance.delete()
 
 

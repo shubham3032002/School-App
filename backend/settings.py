@@ -46,7 +46,8 @@ INSTALLED_APPS = [
     # Local
     'accounts',
     'teacher',
-    'student'
+    'student',
+    'homework'
 ]
 
 # ─────────────────────────────────────────────────────────────
