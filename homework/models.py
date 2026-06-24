@@ -4,14 +4,19 @@ from teacher.models import Class, Teacher
 from student.models import Student
 
 
+def homework_submission_image_path(instance, filename):
+    ext = filename.rsplit('.', 1)[-1].lower()
+    return f"homework_submissions/{instance.homework_id}/{instance.student_id}.{ext}"
+
+
 class Homework(models.Model):
     class Status(models.TextChoices):
         DRAFT     = 'draft',     'Draft'
         PUBLISHED = 'published', 'Published'
         CLOSED    = 'closed',    'Closed'
 
-    teacher       = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='hw_assigned')          # ✅ changed
-    klass         = models.ForeignKey(Class,   on_delete=models.CASCADE, related_name='hw_homework')          # ✅ changed
+    teacher       = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='hw_assigned')
+    klass         = models.ForeignKey(Class,   on_delete=models.CASCADE, related_name='hw_homework')
     subject       = models.CharField(max_length=80)
     title         = models.CharField(max_length=200)
     description   = models.TextField(blank=True)
@@ -41,17 +46,22 @@ class HomeworkSubmission(models.Model):
         SUBMITTED = 'submitted', 'Submitted'
         LATE      = 'late',      'Late'
 
-    homework          = models.ForeignKey(Homework, on_delete=models.CASCADE, related_name='hw_submissions')  # ✅ changed
-    student           = models.ForeignKey(Student,  on_delete=models.CASCADE, related_name='hw_submissions')  # ✅ changed
+    homework          = models.ForeignKey(Homework, on_delete=models.CASCADE, related_name='hw_submissions')
+    student           = models.ForeignKey(Student,  on_delete=models.CASCADE, related_name='hw_submissions')
     submission_notes  = models.TextField(blank=True)
     submission_status = models.CharField(max_length=10, choices=SubmissionStatus.choices, default=SubmissionStatus.PENDING)
     submitted_at      = models.DateTimeField(null=True, blank=True)
     grade             = models.PositiveSmallIntegerField(null=True, blank=True)
+    submission_image  = models.ImageField(
+        upload_to=homework_submission_image_path,
+        null=True,
+        blank=True,
+    )
 
     class Meta:
-        ordering = ['homework__due_date', 'student__first_name']
+        ordering        = ['homework__due_date', 'student__first_name']
         unique_together = ('homework', 'student')
-        verbose_name = 'homework submission'
+        verbose_name        = 'homework submission'
         verbose_name_plural = 'homework submissions'
 
     def __str__(self):

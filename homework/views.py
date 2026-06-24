@@ -1,6 +1,5 @@
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db.models import Q
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied, AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
@@ -8,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
-from teacher.models import Class
+from teacher.models import Teacher
 from student.models import Student
 from .models import Homework, HomeworkSubmission
 from .permissions import IsAssignedTeacher
@@ -19,9 +18,12 @@ from .serializers import (
     HomeworkSubmissionWriteSerializer,
 )
 
+ALLOWED_IMAGE_TYPES  = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
 
 # ─────────────────────────────────────────────
-# Helper — decode student JWT (same pattern as student app)
+# Helper — decode student JWT
 # ─────────────────────────────────────────────
 
 def get_student_from_token(request):
@@ -46,8 +48,8 @@ def get_student_from_token(request):
 
 class HomeworkListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/homework/          — teacher sees only their own homework
-    POST /api/homework/          — teacher creates homework for their class
+    GET  /api/homework/   — teacher sees only their own homework
+    POST /api/homework/   — teacher creates homework for their class
     """
     permission_classes = [IsAuthenticated]
 
@@ -61,18 +63,16 @@ class HomeworkListCreateView(generics.ListCreateAPIView):
         if user.role in ['admin', 'principal']:
             qs = Homework.objects.select_related('teacher__user', 'klass').all()
         elif teacher:
-            # Teacher sees only homework they assigned
             qs = Homework.objects.select_related('teacher__user', 'klass').filter(teacher=teacher)
         else:
             return Homework.objects.none()
 
-        # Optional filters
-        klass_id = self.request.query_params.get('klass')
-        subject  = self.request.query_params.get('subject')
+        klass_id  = self.request.query_params.get('klass')
+        subject   = self.request.query_params.get('subject')
         hw_status = self.request.query_params.get('status')
-        if klass_id:   qs = qs.filter(klass_id=klass_id)
-        if subject:    qs = qs.filter(subject__icontains=subject)
-        if hw_status:  qs = qs.filter(status=hw_status)
+        if klass_id:  qs = qs.filter(klass_id=klass_id)
+        if subject:   qs = qs.filter(subject__icontains=subject)
+        if hw_status: qs = qs.filter(status=hw_status)
         return qs
 
     def perform_create(self, serializer):
@@ -80,7 +80,6 @@ class HomeworkListCreateView(generics.ListCreateAPIView):
         teacher = getattr(user, 'teacher_profile', None)
 
         if user.role in ['admin', 'principal']:
-            # Admin/principal can assign on behalf of any teacher
             serializer.save()
             return
 
@@ -89,7 +88,6 @@ class HomeworkListCreateView(generics.ListCreateAPIView):
 
         klass = serializer.validated_data.get('klass')
 
-        # Teacher must be assigned to this class
         from teacher.models import TeacherClassAssignment
         is_assigned = TeacherClassAssignment.objects.filter(
             teacher=teacher, klass=klass
@@ -97,7 +95,6 @@ class HomeworkListCreateView(generics.ListCreateAPIView):
         if not is_assigned:
             raise PermissionDenied('You can only assign homework to classes you teach.')
 
-        # Teacher field must match the logged-in teacher
         if serializer.validated_data.get('teacher') != teacher:
             raise PermissionDenied('You can only create homework under your own name.')
 
@@ -106,9 +103,9 @@ class HomeworkListCreateView(generics.ListCreateAPIView):
 
 class HomeworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
-    GET    /api/homework/<id>/  — retrieve
-    PATCH  /api/homework/<id>/  — teacher updates their own homework
-    DELETE /api/homework/<id>/  — teacher deletes their own homework
+    GET    /api/homework/<id>/
+    PATCH  /api/homework/<id>/
+    DELETE /api/homework/<id>/
     """
     permission_classes = [IsAuthenticated, IsAssignedTeacher]
 
@@ -132,10 +129,9 @@ class HomeworkDetailView(generics.RetrieveUpdateDestroyAPIView):
 class HomeworkSubmissionsView(generics.ListAPIView):
     """
     GET /api/homework/<homework_id>/submissions/
-    Teacher sees all submissions for their homework.
     """
-    permission_classes    = [IsAuthenticated]
-    serializer_class      = HomeworkSubmissionReadSerializer
+    permission_classes = [IsAuthenticated]
+    serializer_class   = HomeworkSubmissionReadSerializer
 
     def get_queryset(self):
         homework_id = self.kwargs['homework_id']
@@ -144,22 +140,26 @@ class HomeworkSubmissionsView(generics.ListAPIView):
 
         homework = get_object_or_404(Homework, pk=homework_id)
 
-        # Only the assigned teacher, admin, or principal can see submissions
         if user.role not in ['admin', 'principal']:
             if teacher is None or homework.teacher != teacher:
                 raise PermissionDenied('You can only view submissions for your own homework.')
 
         return HomeworkSubmission.objects.select_related(
-                'student', 'homework__klass'
-            ).filter(homework=homework)
+            'student', 'homework__klass'
+        ).filter(homework=homework)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
 
 class GradeSubmissionView(generics.UpdateAPIView):
     """
     PATCH /api/homework/submissions/<id>/grade/
-    Teacher grades a submission.
     """
-    permission_classes   = [IsAuthenticated]
-    serializer_class     = HomeworkSubmissionWriteSerializer
+    permission_classes = [IsAuthenticated]
+    serializer_class   = HomeworkSubmissionWriteSerializer
 
     def get_queryset(self):
         return HomeworkSubmission.objects.select_related('homework__teacher', 'student')
@@ -183,8 +183,6 @@ class GradeSubmissionView(generics.UpdateAPIView):
 class StudentHomeworkListView(APIView):
     """
     GET /api/homework/student/my-homework/
-    Student sees only published homework for their class.
-    Uses student JWT token.
     """
     permission_classes     = []
     authentication_classes = []
@@ -195,7 +193,7 @@ class StudentHomeworkListView(APIView):
         if student.class_id is None:
             return Response(
                 {'detail': 'You are not assigned to any class.'},
-                status=status.HTTP_200_OK
+                status=status.HTTP_200_OK,
             )
 
         homework = Homework.objects.select_related('teacher__user', 'klass').filter(
@@ -203,7 +201,7 @@ class StudentHomeworkListView(APIView):
             status=Homework.Status.PUBLISHED,
         ).order_by('-assigned_date')
 
-        serializer = HomeworkReadSerializer(homework, many=True)
+        serializer = HomeworkReadSerializer(homework, many=True, context={'request': request})
         return Response({
             'class':    student.class_id.name,
             'total':    homework.count(),
@@ -214,9 +212,10 @@ class StudentHomeworkListView(APIView):
 class StudentSubmitHomeworkView(APIView):
     """
     POST /api/homework/<homework_id>/submit/
-    Student submits their homework.
-    Uses student JWT token.
-    Body: { "submission_notes": "..." }
+    Content-Type: multipart/form-data
+    Fields:
+        submission_notes  (text, optional)
+        submission_image  (image file, optional — JPEG/PNG/WEBP/GIF, max 5 MB)
     """
     permission_classes     = []
     authentication_classes = []
@@ -225,12 +224,25 @@ class StudentSubmitHomeworkView(APIView):
         student  = get_student_from_token(request)
         homework = get_object_or_404(Homework, pk=homework_id, status=Homework.Status.PUBLISHED)
 
-        # Student must belong to the homework's class
         if student.class_id != homework.klass:
             return Response(
                 {'detail': 'This homework is not assigned to your class.'},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
+
+        # Validate image before touching the DB
+        image_file = request.FILES.get('submission_image')
+        if image_file:
+            if image_file.content_type not in ALLOWED_IMAGE_TYPES:
+                return Response(
+                    {'submission_image': 'Only JPEG, PNG, WEBP, or GIF images are allowed.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if image_file.size > MAX_IMAGE_SIZE_BYTES:
+                return Response(
+                    {'submission_image': 'Image must be smaller than 5 MB.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         submitted_at      = timezone.now()
         submission_status = (
@@ -239,33 +251,48 @@ class StudentSubmitHomeworkView(APIView):
             else HomeworkSubmission.SubmissionStatus.SUBMITTED
         )
 
+        # Delete old image from disk if student is re-submitting with a new image
+        existing = HomeworkSubmission.objects.filter(
+            homework=homework, student=student
+        ).first()
+        if image_file and existing and existing.submission_image:
+            existing.submission_image.delete(save=False)
+
+        defaults = {
+            'submission_notes':  request.data.get('submission_notes', ''),
+            'submission_status': submission_status,
+            'submitted_at':      submitted_at,
+        }
+        if image_file:
+            defaults['submission_image'] = image_file
+
         submission, created = HomeworkSubmission.objects.update_or_create(
             homework=homework,
             student=student,
-            defaults={
-                'submission_notes':  request.data.get('submission_notes', ''),
-                'submission_status': submission_status,
-                'submitted_at':      submitted_at,
-            }
+            defaults=defaults,
         )
 
-        serializer = HomeworkSubmissionReadSerializer(submission)
-        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        serializer = HomeworkSubmissionReadSerializer(submission, context={'request': request})
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 
 class StudentMySubmissionsView(APIView):
     """
     GET /api/homework/student/my-submissions/
-    Student sees all their own submissions.
-    Uses student JWT token.
     """
     permission_classes     = []
     authentication_classes = []
 
     def get(self, request):
-        student     = get_student_from_token(request)
+        student = get_student_from_token(request)
         submissions = HomeworkSubmission.objects.select_related(
             'homework__klass', 'homework__teacher__user'
         ).filter(student=student).order_by('-homework__due_date')
-        serializer = HomeworkSubmissionReadSerializer(submissions, many=True)
+
+        serializer = HomeworkSubmissionReadSerializer(
+            submissions, many=True, context={'request': request}
+        )
         return Response({'total': submissions.count(), 'submissions': serializer.data})
