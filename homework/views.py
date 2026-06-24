@@ -155,14 +155,17 @@ class HomeworkSubmissionsView(generics.ListAPIView):
 
 
 class GradeSubmissionView(generics.UpdateAPIView):
-    """
-    PATCH /api/homework/submissions/<id>/grade/
-    """
     permission_classes = [IsAuthenticated]
     serializer_class   = HomeworkSubmissionWriteSerializer
 
     def get_queryset(self):
         return HomeworkSubmission.objects.select_related('homework__teacher', 'student')
+
+    # ✅ ADD THIS METHOD
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     def perform_update(self, serializer):
         submission = self.get_object()

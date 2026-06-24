@@ -16,4 +16,8 @@ urlpatterns = [
     path('api/', include('teacher.urls')),
     path('api/students/', include('student.urls')),
     path('api/homework/', include('homework.urls')),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+
+# ✅ CHANGE THIS — only serve media locally, not in production
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
