@@ -56,6 +56,11 @@ class HomeworkListCreateView(generics.ListCreateAPIView):
     def get_serializer_class(self):
         return HomeworkWriteSerializer if self.request.method == 'POST' else HomeworkReadSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
     def get_queryset(self):
         user    = self.request.user
         teacher = getattr(user, 'teacher_profile', None)
@@ -112,6 +117,11 @@ class HomeworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_serializer_class(self):
         return HomeworkWriteSerializer if self.request.method in ['PUT', 'PATCH'] else HomeworkReadSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
     def get_queryset(self):
         user    = self.request.user
         teacher = getattr(user, 'teacher_profile', None)
@@ -161,7 +171,6 @@ class GradeSubmissionView(generics.UpdateAPIView):
     def get_queryset(self):
         return HomeworkSubmission.objects.select_related('homework__teacher', 'student')
 
-    # ✅ ADD THIS METHOD
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context['request'] = self.request
@@ -233,7 +242,6 @@ class StudentSubmitHomeworkView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Validate image before touching the DB
         image_file = request.FILES.get('submission_image')
         if image_file:
             if image_file.content_type not in ALLOWED_IMAGE_TYPES:
@@ -254,7 +262,6 @@ class StudentSubmitHomeworkView(APIView):
             else HomeworkSubmission.SubmissionStatus.SUBMITTED
         )
 
-        # Delete old image from disk if student is re-submitting with a new image
         existing = HomeworkSubmission.objects.filter(
             homework=homework, student=student
         ).first()

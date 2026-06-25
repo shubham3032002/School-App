@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Homework, HomeworkSubmission
 
-ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+ALLOWED_IMAGE_TYPES  = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
@@ -11,8 +11,17 @@ class HomeworkWriteSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'teacher', 'klass', 'subject',
             'title', 'description', 'assigned_date', 'due_date', 'status',
+            'homework_image',
         ]
         read_only_fields = ['id']
+
+    def validate_homework_image(self, value):
+        if value:
+            if value.content_type not in ALLOWED_IMAGE_TYPES:
+                raise serializers.ValidationError('Only JPEG, PNG, WEBP, or GIF images are allowed.')
+            if value.size > MAX_IMAGE_SIZE_BYTES:
+                raise serializers.ValidationError('Image must be smaller than 5 MB.')
+        return value
 
     def validate(self, attrs):
         assigned_date = attrs.get('assigned_date', getattr(self.instance, 'assigned_date', None))
@@ -23,8 +32,9 @@ class HomeworkWriteSerializer(serializers.ModelSerializer):
 
 
 class HomeworkReadSerializer(serializers.ModelSerializer):
-    teacher_name = serializers.CharField(source='teacher.user.fullname', read_only=True)
-    class_name   = serializers.CharField(source='klass.name',            read_only=True)
+    teacher_name       = serializers.CharField(source='teacher.user.fullname', read_only=True)
+    class_name         = serializers.CharField(source='klass.name',            read_only=True)
+    homework_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model  = Homework
@@ -32,7 +42,14 @@ class HomeworkReadSerializer(serializers.ModelSerializer):
             'id', 'teacher', 'teacher_name', 'klass', 'class_name',
             'subject', 'title', 'description',
             'assigned_date', 'due_date', 'status', 'created_at',
+            'homework_image_url',
         ]
+
+    def get_homework_image_url(self, obj):
+        if not obj.homework_image:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.homework_image.url) if request else obj.homework_image.url
 
 
 class HomeworkSubmissionWriteSerializer(serializers.ModelSerializer):

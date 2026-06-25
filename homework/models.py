@@ -4,6 +4,11 @@ from teacher.models import Class, Teacher
 from student.models import Student
 
 
+def homework_image_path(instance, filename):
+    ext = filename.rsplit('.', 1)[-1].lower()
+    return f"homework_images/{instance.pk or 'new'}/{filename}"
+
+
 def homework_submission_image_path(instance, filename):
     ext = filename.rsplit('.', 1)[-1].lower()
     return f"homework_submissions/{instance.homework_id}/{instance.student_id}.{ext}"
@@ -15,15 +20,20 @@ class Homework(models.Model):
         PUBLISHED = 'published', 'Published'
         CLOSED    = 'closed',    'Closed'
 
-    teacher       = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='hw_assigned')
-    klass         = models.ForeignKey(Class,   on_delete=models.CASCADE, related_name='hw_homework')
-    subject       = models.CharField(max_length=80)
-    title         = models.CharField(max_length=200)
-    description   = models.TextField(blank=True)
-    assigned_date = models.DateField(default=timezone.localdate)
-    due_date      = models.DateField()
-    status        = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
-    created_at    = models.DateTimeField(auto_now_add=True)
+    teacher        = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='hw_assigned')
+    klass          = models.ForeignKey(Class,   on_delete=models.CASCADE, related_name='hw_homework')
+    subject        = models.CharField(max_length=80)
+    title          = models.CharField(max_length=200)
+    description    = models.TextField(blank=True)
+    assigned_date  = models.DateField(default=timezone.localdate)
+    due_date       = models.DateField()
+    status         = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    created_at     = models.DateTimeField(auto_now_add=True)
+    homework_image = models.ImageField(
+        upload_to=homework_image_path,
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ['-assigned_date', 'due_date']
