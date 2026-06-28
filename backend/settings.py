@@ -47,7 +47,8 @@ INSTALLED_APPS = [
     'accounts',
     'teacher',
     'student',
-    'homework'
+    'homework',
+    'quiz',
 ]
 
 # ─────────────────────────────────────────────────────────────
